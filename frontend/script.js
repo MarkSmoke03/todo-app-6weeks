@@ -1,5 +1,5 @@
 // ===== CONFIGURATION =====
-const API_URL = "http://localhost:5000/api/todos";
+const API_URL = "http://localhost:3000/api/todos";
 let currentFilter = "all";
 let currentTodos = [];
 let editingTodoId = null;
