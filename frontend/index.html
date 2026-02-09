@@ -3,148 +3,380 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Todo App | 6-Week Project</title>
+    <title>TODO-IT | Smart Task Manager</title>
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
     />
-    <link rel="stylesheet" href="style.css" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400&display=swap"
       rel="stylesheet"
     />
+    <link rel="stylesheet" href="style.css" />
     <link
       rel="icon"
+      type="image/x-icon"
       href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>✅</text></svg>"
     />
   </head>
   <body>
     <div class="app-container">
-      <!-- Header Section -->
-      <header class="app-header" role="banner">
-        <div class="header-content">
-          <h1><i class="fas fa-check-circle"></i> Todo Master</h1>
-          <p class="subtitle">
-            Your productivity companion for the 6-week challenge
-          </p>
-          <div class="stats">
-            <span class="stat-item">
-              <i class="fas fa-tasks"></i>
-              Total: <span id="totalCount">0</span>
-            </span>
-            <span class="stat-item">
-              <i class="fas fa-check"></i>
-              Completed: <span id="completedCount">0</span>
-            </span>
-            <span class="stat-item">
-              <i class="fas fa-clock"></i>
-              Pending: <span id="pendingCount">0</span>
-            </span>
+      <!-- Sidebar -->
+      <aside class="sidebar">
+        <div class="sidebar-header">
+          <div class="logo">
+            <div class="logo-icon">✅</div>
+            <h1>TODO-IT</h1>
+            <p class="tagline">Where productivity meets simplicity</p>
+          </div>
+          <button class="sidebar-toggle" id="sidebarToggle">
+            <i class="fas fa-chevron-left"></i>
+          </button>
+        </div>
+
+        <nav class="sidebar-nav">
+          <a href="#" class="nav-item active">
+            <i class="fas fa-tasks"></i>
+            <span>My Tasks</span>
+          </a>
+          <a href="#" class="nav-item">
+            <i class="fas fa-star"></i>
+            <span>Important</span>
+          </a>
+          <a href="#" class="nav-item">
+            <i class="fas fa-calendar-alt"></i>
+            <span>Planned</span>
+          </a>
+          <a href="#" class="nav-item">
+            <i class="fas fa-user"></i>
+            <span>Personal</span>
+          </a>
+          <div class="sidebar-divider"></div>
+          <a href="#" class="nav-item">
+            <i class="fas fa-cog"></i>
+            <span>Settings</span>
+          </a>
+        </nav>
+
+        <div class="sidebar-footer">
+          <div class="user-profile">
+            <div class="avatar">👤</div>
+            <div class="user-info">
+              <strong>Welcome back!</strong>
+              <span>Ready to be productive?</span>
+            </div>
           </div>
         </div>
-      </header>
+      </aside>
 
       <!-- Main Content -->
-      <main class="app-main" role="main">
-        <section class="input-section" aria-labelledby="addTodoHeading">
-          <h2 id="addTodoHeading" class="visually-hidden">Add New Todo</h2>
-          <div class="input-container">
-            <div class="input-group">
-              <input
-                type="text"
-                id="todoInput"
-                placeholder="What needs to be done?"
-                aria-label="New todo text"
-                maxlength="200"
-                autocomplete="off"
-              />
-              <span class="char-count"><span id="charCount">0</span>/200</span>
-            </div>
-            <button id="addBtn" class="btn-primary" aria-label="Add todo">
+      <main class="main-content">
+        <!-- Header -->
+        <header class="main-header">
+          <div class="header-left">
+            <h2>My Tasks</h2>
+            <p id="dateDisplay" class="date-display">Loading...</p>
+          </div>
+          <div class="header-right">
+            <button class="btn-primary" id="addTodoBtn">
               <i class="fas fa-plus"></i> Add Task
             </button>
-          </div>
-          <div class="filter-tabs">
-            <button class="filter-btn active" data-filter="all">All</button>
-            <button class="filter-btn" data-filter="pending">Pending</button>
-            <button class="filter-btn" data-filter="completed">
-              Completed
+            <button class="btn-secondary" id="quickAddBtn">
+              <i class="fas fa-bolt"></i> Quick Add
             </button>
           </div>
-        </section>
+        </header>
 
-        <section class="todos-section" aria-labelledby="todosHeading">
-          <h2 id="todosHeading" class="visually-hidden">Your Todos</h2>
+        <!-- Dashboard Stats -->
+        <div class="dashboard">
+          <div class="stat-card gradient-blue">
+            <div class="stat-icon">
+              <i class="fas fa-list-check"></i>
+            </div>
+            <div class="stat-content">
+              <h3>Total Tasks</h3>
+              <p class="stat-number" id="totalTasks">0</p>
+            </div>
+          </div>
+          <div class="stat-card gradient-green">
+            <div class="stat-icon">
+              <i class="fas fa-check-circle"></i>
+            </div>
+            <div class="stat-content">
+              <h3>Completed</h3>
+              <p class="stat-number" id="completedTasks">0</p>
+            </div>
+          </div>
+          <div class="stat-card gradient-orange">
+            <div class="stat-icon">
+              <i class="fas fa-clock"></i>
+            </div>
+            <div class="stat-content">
+              <h3>Pending</h3>
+              <p class="stat-number" id="pendingTasks">0</p>
+            </div>
+          </div>
+          <div class="stat-card gradient-purple">
+            <div class="stat-icon">
+              <i class="fas fa-fire"></i>
+            </div>
+            <div class="stat-content">
+              <h3>Active Streak</h3>
+              <p class="stat-number" id="activeStreak">0 days</p>
+            </div>
+          </div>
+        </div>
 
-          <!-- Loading State -->
-          <div id="loadingState" class="loading-state">
-            <div class="spinner"></div>
-            <p>Loading your todos...</p>
+        <!-- Productivity Score -->
+        <div class="productivity-card">
+          <div class="productivity-header">
+            <h3><i class="fas fa-chart-line"></i> Productivity Score</h3>
+            <span class="progress-percentage" id="productivityScore">0%</span>
+          </div>
+          <div class="progress-bar">
+            <div class="progress-bar-fill" id="productivityBar"></div>
+          </div>
+          <p class="progress-text">Based on completed tasks</p>
+        </div>
+
+        <!-- Controls -->
+        <div class="controls">
+          <div class="search-box">
+            <i class="fas fa-search"></i>
+            <input type="text" id="searchInput" placeholder="Search tasks..." />
+          </div>
+          <div class="control-group">
+            <div class="filter-buttons">
+              <button class="filter-btn active" data-filter="all">
+                All Tasks
+              </button>
+              <button class="filter-btn" data-filter="pending">Pending</button>
+              <button class="filter-btn" data-filter="completed">
+                Completed
+              </button>
+            </div>
+            <select id="sortSelect" class="sort-select">
+              <option value="position">Sort by: Position</option>
+              <option value="newest">Newest First</option>
+              <option value="oldest">Oldest First</option>
+              <option value="priority">Priority</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Todos Container -->
+        <div class="todos-container">
+          <div id="todosContainer">
+            <!-- Todos will be loaded here -->
           </div>
 
           <!-- Empty State -->
-          <div id="emptyState" class="empty-state hidden">
-            <i class="fas fa-clipboard-list"></i>
-            <h3>No todos yet!</h3>
-            <p>Add your first task above to get started.</p>
+          <div class="empty-state" id="emptyState">
+            <div class="empty-illustration">
+              <i class="fas fa-clipboard-list"></i>
+            </div>
+            <h3>No tasks yet</h3>
+            <p>Add your first task to get started!</p>
+            <button class="btn-primary" id="emptyAddBtn">
+              <i class="fas fa-plus"></i> Create First Task
+            </button>
+          </div>
+
+          <!-- Loading State -->
+          <div class="loading-state" id="loadingState">
+            <div class="spinner"></div>
+            <p>Loading your tasks...</p>
           </div>
 
           <!-- Error State -->
-          <div id="errorState" class="error-state hidden">
-            <i class="fas fa-exclamation-triangle"></i>
-            <h3>Connection Error</h3>
-            <p>Unable to load todos. Please check your backend server.</p>
-            <button id="retryBtn" class="btn-secondary">Retry</button>
+          <div class="error-state" id="errorState">
+            <div class="error-icon">
+              <i class="fas fa-exclamation-triangle"></i>
+            </div>
+            <h3>Something went wrong</h3>
+            <p id="errorMessage">Unable to load tasks</p>
+            <button class="btn-secondary" id="retryBtn">
+              <i class="fas fa-redo"></i> Try Again
+            </button>
           </div>
-
-          <!-- Todos List -->
-          <ul id="todoList" class="todo-list" aria-label="List of todos">
-            <!-- Todo items will be inserted here dynamically -->
-          </ul>
-        </section>
-      </main>
-
-      <!-- Footer -->
-      <footer class="app-footer" role="contentinfo">
-        <div class="footer-content">
-          <p>6-Week Todo App Project • Week 2: Frontend Development</p>
-          <p class="footer-links">
-            <a href="#" aria-label="Keyboard shortcuts"
-              ><i class="fas fa-keyboard"></i> Press 'Enter' to add</a
-            >
-            •
-            <a href="#" aria-label="Check backend connection"
-              ><i class="fas fa-server"></i> Backend:
-              <span id="backendStatus">Checking...</span></a
-            >
-          </p>
         </div>
-      </footer>
+
+        <!-- Footer -->
+        <footer class="main-footer">
+          <p>
+            TODO-IT v2.0 • Made with <i class="fas fa-heart"></i> for
+            productivity
+          </p>
+          <div class="footer-links">
+            <span id="todoCount">0 tasks</span>
+            •
+            <span id="completedCount">0 completed</span>
+            •
+            <span
+              >API:
+              <span id="apiStatus" class="status-online">Online</span></span
+            >
+          </div>
+        </footer>
+      </main>
     </div>
 
-    <!-- Edit Modal (Hidden by default) -->
-    <div
-      id="editModal"
-      class="modal hidden"
-      role="dialog"
-      aria-labelledby="editModalTitle"
-    >
+    <!-- Add Todo Modal -->
+    <div class="modal" id="addTodoModal">
       <div class="modal-content">
-        <h3 id="editModalTitle">Edit Todo</h3>
-        <input
-          type="text"
-          id="editTodoInput"
-          placeholder="Edit todo text..."
-          aria-label="Edit todo text"
-        />
-        <div class="modal-actions">
-          <button id="cancelEditBtn" class="btn-secondary">Cancel</button>
-          <button id="saveEditBtn" class="btn-primary">Save Changes</button>
+        <div class="modal-header">
+          <h3><i class="fas fa-plus-circle"></i> Add New Task</h3>
+          <button class="close-btn">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="todoTitle"
+              ><i class="fas fa-heading"></i> Task Title*</label
+            >
+            <input
+              type="text"
+              id="todoTitle"
+              placeholder="What needs to be done?"
+              required
+            />
+          </div>
+          <div class="form-group">
+            <label for="todoDesc"
+              ><i class="fas fa-align-left"></i> Description</label
+            >
+            <textarea
+              id="todoDesc"
+              placeholder="Add details (max 500 characters)"
+              maxlength="500"
+            ></textarea>
+            <div class="char-counter">
+              <span id="descCharCount">0/500</span>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="todoPriority"
+              ><i class="fas fa-flag"></i> Priority</label
+            >
+            <select id="todoPriority">
+              <option value="low">Low Priority</option>
+              <option value="medium" selected>Medium Priority</option>
+              <option value="high">High Priority</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-secondary cancel-btn">Cancel</button>
+          <button class="btn-primary" id="saveTodoBtn">
+            <i class="fas fa-save"></i> Save Task
+          </button>
         </div>
       </div>
     </div>
+
+    <!-- Edit Todo Modal -->
+    <div class="modal" id="editTodoModal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3><i class="fas fa-edit"></i> Edit Task</h3>
+          <button class="close-btn">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="editTodoTitle">Task Title*</label>
+            <input
+              type="text"
+              id="editTodoTitle"
+              placeholder="Task title"
+              required
+            />
+          </div>
+          <div class="form-group">
+            <label for="editTodoDesc">Description</label>
+            <textarea
+              id="editTodoDesc"
+              placeholder="Task description"
+              maxlength="500"
+            ></textarea>
+            <div class="char-counter">
+              <span id="editDescCharCount">0/500</span>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="editTodoPriority">Priority</label>
+            <select id="editTodoPriority">
+              <option value="low">Low Priority</option>
+              <option value="medium">Medium Priority</option>
+              <option value="high">High Priority</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-secondary cancel-btn">Cancel</button>
+          <button class="btn-primary" id="saveEditBtn">
+            <i class="fas fa-save"></i> Update Task
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quick Add Modal -->
+    <div class="modal" id="quickAddModal">
+      <div class="modal-content quick-add">
+        <div class="modal-header">
+          <h3><i class="fas fa-bolt"></i> Quick Add</h3>
+          <button class="close-btn">&times;</button>
+        </div>
+        <div class="modal-body">
+          <input
+            type="text"
+            id="quickTodoTitle"
+            placeholder="Type your task and press Enter..."
+            autofocus
+          />
+          <p class="hint">
+            <i class="fas fa-lightbulb"></i> Press Enter to save, Esc to cancel
+          </p>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-secondary cancel-btn">Cancel</button>
+          <button class="btn-primary" id="saveQuickAddBtn">
+            <i class="fas fa-check"></i> Add Task
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toastContainer"></div>
+
+    <!-- Todo Template -->
+    <template id="todoTemplate">
+      <div class="todo-card">
+        <div class="todo-checkbox">
+          <input type="checkbox" class="todo-checkbox-input" />
+          <div class="checkbox-custom"></div>
+        </div>
+        <div class="todo-content">
+          <div class="todo-header">
+            <h4 class="todo-title"></h4>
+            <div class="todo-actions">
+              <button class="action-btn edit-btn" title="Edit">
+                <i class="fas fa-edit"></i>
+              </button>
+              <button class="action-btn delete-btn" title="Delete">
+                <i class="fas fa-trash"></i>
+              </button>
+              <span class="priority-badge"></span>
+            </div>
+          </div>
+          <p class="todo-description"></p>
+          <div class="todo-footer">
+            <span class="todo-date"></span>
+            <span class="todo-status"></span>
+          </div>
+        </div>
+      </div>
+    </template>
 
     <script src="script.js"></script>
   </body>

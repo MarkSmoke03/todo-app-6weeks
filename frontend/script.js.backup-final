@@ -1,0 +1,614 @@
+﻿// TODO-IT v2.0 - Fixed Modal & Toast Version
+console.log("✅ TODO-IT Initialized");
+
+// ============================================
+// 📱 DOM ELEMENTS
+// ============================================
+const sidebar = document.querySelector(".sidebar");
+const sidebarToggle = document.querySelector(".sidebar-toggle");
+const todosContainer = document.getElementById("todosContainer");
+const todoTemplate = document.getElementById("todoTemplate");
+const addTodoBtn = document.getElementById("addTodoBtn");
+const quickAddBtn = document.getElementById("quickAddBtn");
+const saveTodoBtn = document.getElementById("saveTodoBtn");
+const saveEditBtn = document.getElementById("saveEditBtn");
+const saveQuickAddBtn = document.getElementById("saveQuickAddBtn");
+const todoTitleInput = document.getElementById("todoTitle");
+const todoDescInput = document.getElementById("todoDesc");
+const todoPriorityInput = document.getElementById("todoPriority");
+const quickTodoTitleInput = document.getElementById("quickTodoTitle");
+const editTodoTitleInput = document.getElementById("editTodoTitle");
+const editTodoDescInput = document.getElementById("editTodoDesc");
+const editTodoPriorityInput = document.getElementById("editTodoPriority");
+
+// Modals
+const addTodoModal = document.getElementById("addTodoModal");
+const editTodoModal = document.getElementById("editTodoModal");
+const quickAddModal = document.getElementById("quickAddModal");
+
+// State
+let todos = [];
+let editingTodoId = null;
+
+// ============================================
+// 🚀 INITIALIZATION
+// ============================================
+document.addEventListener("DOMContentLoaded", () => {
+  console.log("🚀 App loaded");
+  initEventListeners();
+  loadTodos();
+  updateDateDisplay();
+});
+
+// ============================================
+// 📱 EVENT LISTENERS (FIXED - NO BACKTICK ISSUES)
+// ============================================
+function initEventListeners() {
+  console.log("Setting up event listeners...");
+
+  // Add Todo Button - FIXED
+  if (addTodoBtn) {
+    addTodoBtn.addEventListener("click", function (e) {
+      console.log("Add Todo button clicked");
+      e.preventDefault();
+      e.stopPropagation();
+      openModal(addTodoModal);
+    });
+  }
+
+  // Quick Add Button - FIXED
+  if (quickAddBtn) {
+    quickAddBtn.addEventListener("click", function (e) {
+      console.log("Quick Add button clicked");
+      e.preventDefault();
+      e.stopPropagation();
+      openModal(quickAddModal);
+    });
+  }
+
+  // Save Todo Button - FIXED
+  if (saveTodoBtn) {
+    saveTodoBtn.addEventListener("click", function (e) {
+      console.log("Save Todo button clicked");
+      e.preventDefault();
+      e.stopPropagation();
+      createTodo();
+    });
+  }
+
+  // Save Quick Add Button - FIXED
+  if (saveQuickAddBtn) {
+    saveQuickAddBtn.addEventListener("click", function (e) {
+      console.log("Save Quick Add button clicked");
+      e.preventDefault();
+      e.stopPropagation();
+      createQuickTodo();
+    });
+  }
+
+  // Save Edit Button - FIXED
+  if (saveEditBtn) {
+    saveEditBtn.addEventListener("click", function (e) {
+      console.log("Save Edit button clicked");
+      e.preventDefault();
+      e.stopPropagation();
+      updateTodo();
+    });
+  }
+
+  // Close buttons - FIXED
+  document.querySelectorAll(".close-btn, .cancel-btn").forEach((btn) => {
+    btn.addEventListener("click", function (e) {
+      console.log("Close button clicked");
+      e.preventDefault();
+      e.stopPropagation();
+      closeAllModals();
+    });
+  });
+
+  // Modal backdrop - FIXED: Only close if clicking backdrop itself
+  document.querySelectorAll(".modal").forEach((modal) => {
+    modal.addEventListener("click", function (e) {
+      if (e.target === modal) {
+        console.log("Modal backdrop clicked");
+        closeAllModals();
+      }
+    });
+  });
+
+  // Quick Add Enter key
+  if (quickTodoTitleInput) {
+    quickTodoTitleInput.addEventListener("keypress", function (e) {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        createQuickTodo();
+      }
+    });
+  }
+
+  // Escape key to close modals
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") {
+      closeAllModals();
+    }
+  });
+
+  // Update date every minute
+  setInterval(updateDateDisplay, 60000);
+}
+
+// ============================================
+// 🪟 MODAL FUNCTIONS (FIXED)
+// ============================================
+function openModal(modal) {
+  console.log("Opening modal:", modal.id);
+
+  if (!modal) {
+    console.error("Modal not found!");
+    return;
+  }
+
+  // Close any open modals first
+  closeAllModals();
+
+  // Show the modal
+  modal.style.display = "flex";
+
+  // Add active class after a short delay for animation
+  setTimeout(function () {
+    modal.classList.add("active");
+  }, 10);
+
+  // Prevent body scrolling
+  document.body.style.overflow = "hidden";
+
+  // Focus first input
+  setTimeout(function () {
+    const input = modal.querySelector("input, textarea, select");
+    if (input) {
+      input.focus();
+      input.select();
+    }
+  }, 50);
+
+  console.log("Modal opened successfully");
+}
+
+function closeAllModals() {
+  console.log("Closing all modals");
+
+  document.querySelectorAll(".modal").forEach((modal) => {
+    // Remove active class for animation
+    modal.classList.remove("active");
+
+    // Hide after animation completes
+    setTimeout(function () {
+      if (!modal.classList.contains("active")) {
+        modal.style.display = "none";
+      }
+    }, 250);
+  });
+
+  // Restore body scrolling
+  document.body.style.overflow = "";
+
+  // Reset form
+  resetAddForm();
+  editingTodoId = null;
+}
+
+function resetAddForm() {
+  if (todoTitleInput) todoTitleInput.value = "";
+  if (todoDescInput) todoDescInput.value = "";
+  if (todoPriorityInput) todoPriorityInput.value = "medium";
+}
+
+// ============================================
+// ✅ CRUD OPERATIONS
+// ============================================
+async function createTodo() {
+  if (!todoTitleInput) return;
+
+  const title = todoTitleInput.value.trim();
+  const description = todoDescInput ? todoDescInput.value.trim() : "";
+  const priority = todoPriorityInput ? todoPriorityInput.value : "medium";
+
+  if (!title) {
+    showMessage("Please enter a task title", "warning");
+    return;
+  }
+
+  try {
+    const response = await fetch("http://localhost:3000/api/todos", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        title: title,
+        description: description,
+        priority: priority,
+        completed: false,
+        position: todos.length,
+      }),
+    });
+
+    console.log("Create response:", response.status);
+
+    if (response.ok) {
+      const newTodo = await response.json();
+      todos.push(newTodo);
+
+      closeAllModals();
+      renderTodos();
+      updateDashboard();
+      showMessage("Task created successfully!", "success");
+    } else {
+      showMessage(
+        "Failed to create task. Server error: " + response.status,
+        "error",
+      );
+    }
+  } catch (error) {
+    console.error("Error creating todo:", error);
+    showMessage("Failed to create task. Check console for details.", "error");
+  }
+}
+
+async function createQuickTodo() {
+  if (!quickTodoTitleInput) return;
+
+  const title = quickTodoTitleInput.value.trim();
+
+  if (!title) {
+    showMessage("Please enter a task title", "warning");
+    return;
+  }
+
+  try {
+    const response = await fetch("http://localhost:3000/api/todos", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        title: title,
+        description: "",
+        priority: "medium",
+        completed: false,
+        position: todos.length,
+      }),
+    });
+
+    if (response.ok) {
+      const newTodo = await response.json();
+      todos.push(newTodo);
+
+      closeAllModals();
+      quickTodoTitleInput.value = "";
+      renderTodos();
+      updateDashboard();
+      showMessage("Task added quickly!", "success");
+    } else {
+      showMessage("Failed to add task", "error");
+    }
+  } catch (error) {
+    console.error("Error creating quick todo:", error);
+    showMessage("Failed to add task", "error");
+  }
+}
+
+async function updateTodo() {
+  if (!editingTodoId || !editTodoTitleInput) return;
+
+  const title = editTodoTitleInput.value.trim();
+  const description = editTodoDescInput ? editTodoDescInput.value.trim() : "";
+  const priority = editTodoPriorityInput
+    ? editTodoPriorityInput.value
+    : "medium";
+
+  if (!title) {
+    showMessage("Please enter a task title", "warning");
+    return;
+  }
+
+  try {
+    const response = await fetch(
+      "http://localhost:3000/api/todos/" + editingTodoId,
+      {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          title: title,
+          description: description,
+          priority: priority,
+        }),
+      },
+    );
+
+    if (response.ok) {
+      // Update local state
+      const index = todos.findIndex((t) => t.id === editingTodoId);
+      if (index !== -1) {
+        todos[index] = { ...todos[index], title, description, priority };
+      }
+
+      closeAllModals();
+      renderTodos();
+      updateDashboard();
+      showMessage("Task updated successfully!", "success");
+    } else {
+      showMessage("Failed to update task", "error");
+    }
+  } catch (error) {
+    console.error("Error updating todo:", error);
+    showMessage("Failed to update task", "error");
+  }
+}
+
+async function loadTodos() {
+  try {
+    const response = await fetch("http://localhost:3000/api/todos");
+    if (response.ok) {
+      const data = await response.json();
+      todos = data.sort((a, b) => a.position - b.position);
+      renderTodos();
+      updateDashboard();
+      console.log("Loaded", todos.length, "todos");
+    } else {
+      console.error("Failed to load todos:", response.status);
+    }
+  } catch (error) {
+    console.error("Failed to load todos:", error);
+  }
+}
+
+// ============================================
+// 🎨 RENDERING FUNCTIONS
+// ============================================
+function renderTodos() {
+  if (!todosContainer) return;
+
+  todosContainer.innerHTML = "";
+
+  if (todos.length === 0) {
+    // Show empty state
+    const emptyState = document.getElementById("emptyState");
+    if (emptyState) emptyState.style.display = "block";
+    return;
+  }
+
+  // Hide empty state
+  const emptyState = document.getElementById("emptyState");
+  if (emptyState) emptyState.style.display = "none";
+
+  todos.forEach((todo) => {
+    const todoElement = createTodoElement(todo);
+    todosContainer.appendChild(todoElement);
+  });
+}
+
+function createTodoElement(todo) {
+  if (!todoTemplate) return document.createElement("div");
+
+  const template = todoTemplate.content.cloneNode(true);
+  const todoCard = template.querySelector(".todo-card");
+  const checkbox = template.querySelector(".todo-checkbox-input");
+  const title = template.querySelector(".todo-title");
+  const description = template.querySelector(".todo-description");
+  const priorityBadge = template.querySelector(".priority-badge");
+  const editBtn = template.querySelector(".edit-btn");
+  const deleteBtn = template.querySelector(".delete-btn");
+
+  // Set todo ID
+  todoCard.dataset.id = todo.id;
+
+  // Set completion state
+  if (todo.completed) {
+    todoCard.classList.add("completed");
+    if (checkbox) checkbox.checked = true;
+  }
+
+  // Set content
+  if (title) title.textContent = todo.title;
+  if (description)
+    description.textContent = todo.description || "No description";
+
+  // Set priority
+  if (priorityBadge) {
+    const priority = todo.priority || "medium";
+    priorityBadge.textContent =
+      priority.charAt(0).toUpperCase() + priority.slice(1);
+    priorityBadge.dataset.priority = priority;
+  }
+
+  // Event listeners
+  if (checkbox) {
+    checkbox.addEventListener("change", function () {
+      toggleTodoCompletion(todo.id);
+    });
+  }
+
+  if (editBtn) {
+    editBtn.addEventListener("click", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      openEditModal(todo);
+    });
+  }
+
+  if (deleteBtn) {
+    deleteBtn.addEventListener("click", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      deleteTodo(todo.id);
+    });
+  }
+
+  return todoCard;
+}
+
+function openEditModal(todo) {
+  editingTodoId = todo.id;
+
+  if (editTodoTitleInput) editTodoTitleInput.value = todo.title;
+  if (editTodoDescInput) editTodoDescInput.value = todo.description || "";
+  if (editTodoPriorityInput)
+    editTodoPriorityInput.value = todo.priority || "medium";
+
+  openModal(editTodoModal);
+}
+
+async function toggleTodoCompletion(id) {
+  const todo = todos.find((t) => t.id === id);
+  if (!todo) return;
+
+  try {
+    const response = await fetch("http://localhost:3000/api/todos/" + id, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        completed: !todo.completed,
+      }),
+    });
+
+    if (response.ok) {
+      todo.completed = !todo.completed;
+      renderTodos();
+      updateDashboard();
+      showMessage(
+        todo.completed ? "Task completed!" : "Task marked as pending",
+        "success",
+      );
+    }
+  } catch (error) {
+    console.error("Error toggling todo:", error);
+    showMessage("Failed to update task", "error");
+  }
+}
+
+async function deleteTodo(id) {
+  if (!confirm("Are you sure you want to delete this task?")) {
+    return;
+  }
+
+  try {
+    const response = await fetch("http://localhost:3000/api/todos/" + id, {
+      method: "DELETE",
+    });
+
+    if (response.ok) {
+      todos = todos.filter((t) => t.id !== id);
+      renderTodos();
+      updateDashboard();
+      showMessage("Task deleted successfully!", "success");
+    } else {
+      showMessage("Failed to delete task", "error");
+    }
+  } catch (error) {
+    console.error("Error deleting todo:", error);
+    showMessage("Failed to delete task", "error");
+  }
+}
+
+// ============================================
+// 📊 DASHBOARD FUNCTIONS
+// ============================================
+function updateDashboard() {
+  const total = todos.length;
+  const completed = todos.filter((t) => t.completed).length;
+  const pending = total - completed;
+  const productivity = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+  // Update elements if they exist
+  const totalEl = document.getElementById("totalTasks");
+  const completedEl = document.getElementById("completedTasks");
+  const pendingEl = document.getElementById("pendingTasks");
+  const productivityEl = document.getElementById("productivityScore");
+  const productivityBar = document.getElementById("productivityBar");
+
+  if (totalEl) totalEl.textContent = total;
+  if (completedEl) completedEl.textContent = completed;
+  if (pendingEl) pendingEl.textContent = pending;
+  if (productivityEl) productivityEl.textContent = productivity + "%";
+  if (productivityBar) productivityBar.style.width = productivity + "%";
+}
+
+function updateDateDisplay() {
+  const dateDisplay = document.getElementById("dateDisplay");
+  if (!dateDisplay) return;
+
+  const now = new Date();
+  const options = {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  };
+  dateDisplay.textContent = now.toLocaleDateString("en-US", options);
+}
+
+// ============================================
+// 💬 MESSAGE/TOAST FUNCTION (FIXED - NO BACKTICKS)
+// ============================================
+function showMessage(message, type = "success") {
+  console.log("Showing message:", message, type);
+
+  // Create toast container if it doesn't exist
+  let toastContainer = document.getElementById("toastContainer");
+  if (!toastContainer) {
+    toastContainer = document.createElement("div");
+    toastContainer.id = "toastContainer";
+    toastContainer.style.cssText =
+      "position: fixed; bottom: 20px; right: 20px; z-index: 10000;";
+    document.body.appendChild(toastContainer);
+  }
+
+  // Create toast
+  const toast = document.createElement("div");
+  toast.textContent = message;
+
+  // Set styles based on type
+  const baseStyles =
+    "padding: 12px 24px; margin: 5px 0; border-radius: 8px; color: white; font-weight: 500; min-width: 250px;";
+
+  if (type === "success") {
+    toast.style.cssText = baseStyles + "background: #10b981;";
+  } else if (type === "error") {
+    toast.style.cssText = baseStyles + "background: #ef4444;";
+  } else if (type === "warning") {
+    toast.style.cssText = baseStyles + "background: #f59e0b;";
+  } else {
+    toast.style.cssText = baseStyles + "background: #3b82f6;";
+  }
+
+  // Add to container
+  toastContainer.appendChild(toast);
+
+  // Auto-remove after 3 seconds
+  setTimeout(function () {
+    if (toast.parentNode === toastContainer) {
+      toastContainer.removeChild(toast);
+    }
+  }, 3000);
+
+  // Click to dismiss
+  toast.addEventListener("click", function () {
+    if (toast.parentNode === toastContainer) {
+      toastContainer.removeChild(toast);
+    }
+  });
+}
+
+// ============================================
+// 🎉 READY
+// ============================================
+console.log("✅ TODO-IT JavaScript loaded successfully!");

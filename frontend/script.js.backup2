@@ -1,0 +1,966 @@
+// ============================================
+
+// 📱 DOM Elements
+const sidebar = document.querySelector(".sidebar");
+const sidebarToggle = document.querySelector(".sidebar-toggle");
+const mainContent = document.querySelector(".main-content");
+const todosContainer = document.getElementById("todosContainer");
+const todoTemplate = document.getElementById("todoTemplate");
+const emptyState = document.getElementById("emptyState");
+const loadingState = document.getElementById("loadingState");
+const errorState = document.getElementById("errorState");
+const dateDisplay = document.getElementById("dateDisplay");
+const addTodoBtn = document.getElementById("addTodoBtn");
+const quickAddBtn = document.getElementById("quickAddBtn");
+const emptyAddBtn = document.getElementById("emptyAddBtn");
+const retryBtn = document.getElementById("retryBtn");
+const searchInput = document.getElementById("searchInput");
+const filterButtons = document.querySelectorAll(".filter-btn");
+const sortSelect = document.getElementById("sortSelect");
+
+// Dashboard Elements
+const totalTasksElement = document.getElementById("totalTasks");
+const completedTasksElement = document.getElementById("completedTasks");
+const pendingTasksElement = document.getElementById("pendingTasks");
+const activeStreakElement = document.getElementById("activeStreak");
+const productivityScoreElement = document.getElementById("productivityScore");
+const productivityBar = document.getElementById("productivityBar");
+const todoCountElement = document.getElementById("todoCount");
+const completedCountElement = document.getElementById("completedCount");
+const apiStatusElement = document.getElementById("apiStatus");
+
+// Modal Elements
+const addTodoModal = document.getElementById("addTodoModal");
+const editTodoModal = document.getElementById("editTodoModal");
+const quickAddModal = document.getElementById("quickAddModal");
+const saveTodoBtn = document.getElementById("saveTodoBtn");
+const saveEditBtn = document.getElementById("saveEditBtn");
+const saveQuickAddBtn = document.getElementById("saveQuickAddBtn");
+const todoTitleInput = document.getElementById("todoTitle");
+const todoDescInput = document.getElementById("todoDesc");
+const todoPriorityInput = document.getElementById("todoPriority");
+const editTodoTitleInput = document.getElementById("editTodoTitle");
+const editTodoDescInput = document.getElementById("editTodoDesc");
+const editTodoPriorityInput = document.getElementById("editTodoPriority");
+const quickTodoTitleInput = document.getElementById("quickTodoTitle");
+const descCharCount = document.getElementById("descCharCount");
+const editDescCharCount = document.getElementById("editDescCharCount");
+
+// State Management
+let todos = [];
+let currentFilter = "all";
+let currentSort = "position";
+let currentSearch = "";
+let editingTodoId = null;
+let draggedTodo = null;
+
+// Priority Configuration
+const priorityConfig = {
+  low: {
+    label: "Low",
+    color: "#10b981",
+    bgColor: "rgba(16, 185, 129, 0.2)",
+  },
+  medium: {
+    label: "Medium",
+    color: "#f59e0b",
+    bgColor: "rgba(245, 158, 11, 0.2)",
+  },
+  high: {
+    label: "High",
+    color: "#ef4444",
+    bgColor: "rgba(239, 68, 68, 0.2)",
+  },
+};
+
+// API Configuration
+const API_BASE_URL = "http://localhost:3000/api";
+
+// ============================================
+// 🚀 INITIALIZATION
+// ============================================
+
+document.addEventListener("DOMContentLoaded", () => {
+  console.log("✅ TODO-IT v2.0 Initialized");
+
+  // Set current date
+  updateDateDisplay();
+
+  // Initialize event listeners
+  initEventListeners();
+
+  // Load initial data
+  loadTodos();
+
+  // Initialize sidebar for mobile
+  initSidebar();
+});
+
+function initEventListeners() {
+  // Sidebar toggle
+  sidebarToggle?.addEventListener("click", toggleSidebar);
+
+  // Navigation items
+  document.querySelectorAll(".nav-item").forEach((item) => {
+    item.addEventListener("click", (e) => {
+      e.preventDefault();
+      document
+        .querySelectorAll(".nav-item")
+        .forEach((i) => i.classList.remove("active"));
+      item.classList.add("active");
+
+      // Close sidebar on mobile after selection
+      if (window.innerWidth <= 768) {
+        toggleSidebar();
+      }
+    });
+  });
+
+  // Filter buttons
+  filterButtons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const filter = btn.dataset.filter;
+      setActiveFilter(filter);
+    });
+  });
+
+  // Sort select
+  sortSelect?.addEventListener("change", (e) => {
+    currentSort = e.target.value;
+    renderTodos();
+  });
+
+  // Search input
+  searchInput?.addEventListener("input", (e) => {
+    currentSearch = e.target.value.toLowerCase();
+    renderTodos();
+  });
+
+  // Add todo buttons
+  addTodoBtn?.addEventListener("click", () => openModal(addTodoModal));
+  quickAddBtn?.addEventListener("click", () => openModal(quickAddModal));
+  emptyAddBtn?.addEventListener("click", () => openModal(addTodoModal));
+
+  // Save buttons
+  saveTodoBtn?.addEventListener("click", createTodo);
+  saveEditBtn?.addEventListener("click", updateTodo);
+  saveQuickAddBtn?.addEventListener("click", createQuickTodo);
+
+  // Quick add modal - Enter key support
+  quickTodoTitleInput?.addEventListener("keypress", (e) => {
+    if (e.key === "Enter") {
+      createQuickTodo();
+    }
+  });
+
+  // Character counters
+  todoDescInput?.addEventListener("input", () =>
+    updateCharCounter(todoDescInput, descCharCount),
+  );
+  editTodoDescInput?.addEventListener("input", () =>
+    updateCharCounter(editTodoDescInput, editDescCharCount),
+  );
+
+  // Retry button
+  retryBtn?.addEventListener("click", loadTodos);
+
+  // Modal close buttons
+  document.querySelectorAll(".close-btn, .cancel-btn").forEach((btn) => {
+    btn.addEventListener("click", closeAllModals);
+  });
+
+  // Modal backdrop click
+  document.querySelectorAll(".modal").forEach((modal) => {
+    modal.addEventListener("click", (e) => {
+      if (e.target === modal) {
+        closeAllModals();
+      }
+    });
+  });
+
+  // Keyboard shortcuts
+  document.addEventListener("keydown", handleKeyboardShortcuts);
+
+  // Update date every minute
+  setInterval(updateDateDisplay, 60000);
+}
+
+// ============================================
+// 📱 UI FUNCTIONS
+// ============================================
+
+function updateDateDisplay() {
+  if (!dateDisplay) return;
+
+  const now = new Date();
+  const options = {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  };
+  dateDisplay.textContent = now.toLocaleDateString("en-US", options);
+}
+
+function initSidebar() {
+  if (window.innerWidth <= 768) {
+    sidebar?.classList.add("collapsed");
+  }
+
+  window.addEventListener("resize", () => {
+    if (window.innerWidth > 768) {
+      sidebar?.classList.remove("collapsed");
+    }
+  });
+}
+
+function toggleSidebar() {
+  sidebar?.classList.toggle("collapsed");
+  mainContent?.classList.toggle("expanded");
+
+  // Update toggle button icon
+  const icon = sidebarToggle.querySelector("i");
+  if (sidebar?.classList.contains("collapsed")) {
+    icon.className = "fas fa-chevron-right";
+  } else {
+    icon.className = "fas fa-chevron-left";
+  }
+}
+
+function setActiveFilter(filter) {
+  currentFilter = filter;
+
+  filterButtons.forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.filter === filter);
+  });
+
+  renderTodos();
+}
+
+// ============================================
+// 📊 DATA FUNCTIONS
+// ============================================
+
+async function loadTodos() {
+  showLoading();
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/todos`);
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    todos = data.sort((a, b) => a.position - b.position);
+
+    renderTodos();
+    updateDashboard();
+    updateFooter();
+    updateApiStatus(true);
+  } catch (error) {
+    console.error("Error loading todos:", error);
+    showError("Failed to load tasks. Please check your connection.");
+    updateApiStatus(false);
+  }
+}
+
+async function saveTodoOrder() {
+  const orderData = todos.map((todo, index) => ({
+    id: todo.id,
+    position: index,
+  }));
+
+  try {
+    await fetch(`${API_BASE_URL}/todos/reorder`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(orderData),
+    });
+
+    showToast("Task order updated", "success");
+  } catch (error) {
+    console.error("Error saving order:", error);
+    showToast("Failed to save task order", "error");
+  }
+}
+
+// ============================================
+// 🎨 RENDERING FUNCTIONS
+// ============================================
+
+function renderTodos() {
+  if (!todosContainer) return;
+
+  // Clear container
+  todosContainer.innerHTML = "";
+
+  // Filter and sort todos
+  let filteredTodos = filterTodos(todos);
+  filteredTodos = sortTodos(filteredTodos);
+
+  if (filteredTodos.length === 0) {
+    showEmptyState();
+    return;
+  }
+
+  // Hide empty state
+  hideAllStates();
+
+  // Create todo cards
+  filteredTodos.forEach((todo) => {
+    const todoElement = createTodoElement(todo);
+    todosContainer.appendChild(todoElement);
+  });
+
+  // Initialize drag & drop
+  initDragAndDrop();
+}
+
+function filterTodos(todosList) {
+  let filtered = todosList;
+
+  // Apply search filter
+  if (currentSearch) {
+    filtered = filtered.filter(
+      (todo) =>
+        todo.title.toLowerCase().includes(currentSearch) ||
+        todo.description?.toLowerCase().includes(currentSearch),
+    );
+  }
+
+  // Apply status filter
+  switch (currentFilter) {
+    case "pending":
+      return filtered.filter((todo) => !todo.completed);
+    case "completed":
+      return filtered.filter((todo) => todo.completed);
+    default:
+      return filtered;
+  }
+}
+
+function sortTodos(todosList) {
+  switch (currentSort) {
+    case "newest":
+      return [...todosList].sort(
+        (a, b) => new Date(b.created_at) - new Date(a.created_at),
+      );
+    case "oldest":
+      return [...todosList].sort(
+        (a, b) => new Date(a.created_at) - new Date(b.created_at),
+      );
+    case "priority":
+      const priorityOrder = { high: 3, medium: 2, low: 1 };
+      return [...todosList].sort((a, b) => {
+        const priorityA = priorityOrder[a.priority] || 0;
+        const priorityB = priorityOrder[b.priority] || 0;
+        return priorityB - priorityA;
+      });
+    default: // position
+      return [...todosList].sort((a, b) => a.position - b.position);
+  }
+}
+
+function createTodoElement(todo) {
+  const template = todoTemplate.content.cloneNode(true);
+  const todoCard = template.querySelector(".todo-card");
+  const checkbox = template.querySelector(".todo-checkbox-input");
+  const title = template.querySelector(".todo-title");
+  const description = template.querySelector(".todo-description");
+  const priorityBadge = template.querySelector(".priority-badge");
+  const todoDate = template.querySelector(".todo-date");
+  const todoStatus = template.querySelector(".todo-status");
+  const editBtn = template.querySelector(".edit-btn");
+  const deleteBtn = template.querySelector(".delete-btn");
+
+  // Set todo ID
+  todoCard.dataset.id = todo.id;
+  todoCard.draggable = true;
+
+  // Set completion state
+  if (todo.completed) {
+    todoCard.classList.add("completed");
+    checkbox.checked = true;
+  }
+
+  // Set content
+  title.textContent = todo.title;
+  description.textContent = todo.description || "No description provided";
+
+  // Set priority
+  const priority = todo.priority || "medium";
+  const priorityInfo = priorityConfig[priority];
+  priorityBadge.textContent = priorityInfo.label;
+  priorityBadge.style.color = priorityInfo.color;
+  priorityBadge.style.backgroundColor = priorityInfo.bgColor;
+  priorityBadge.dataset.priority = priority;
+
+  // Set dates
+  const createdDate = new Date(todo.created_at);
+  todoDate.textContent = createdDate.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+
+  // Set status
+  todoStatus.textContent = todo.completed ? "Completed" : "Pending";
+  todoStatus.style.color = todo.completed
+    ? priorityConfig.low.color
+    : priorityConfig.medium.color;
+
+  // Event listeners
+  checkbox.addEventListener("change", () => toggleTodoCompletion(todo.id));
+  editBtn.addEventListener("click", () => openEditModal(todo));
+  deleteBtn.addEventListener("click", () => deleteTodo(todo.id));
+
+  // Drag events
+  todoCard.addEventListener("dragstart", handleDragStart);
+  todoCard.addEventListener("dragover", handleDragOver);
+  todoCard.addEventListener("drop", handleDrop);
+  todoCard.addEventListener("dragend", handleDragEnd);
+
+  return todoCard;
+}
+
+// ============================================
+// ✅ CRUD OPERATIONS
+// ============================================
+
+async function createTodo() {
+  const title = todoTitleInput.value.trim();
+  const description = todoDescInput.value.trim();
+  const priority = todoPriorityInput.value;
+
+  if (!title) {
+    showToast("Please enter a task title", "warning");
+    return;
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/todos`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        title,
+        description,
+        priority,
+        completed: false,
+        position: todos.length,
+      }),
+    });
+
+    if (!response.ok) throw new Error("Failed to create task");
+
+    const newTodo = await response.json();
+    todos.push(newTodo);
+
+    closeAllModals();
+    resetAddForm();
+    renderTodos();
+    updateDashboard();
+    updateFooter();
+
+    showToast("Task created successfully!", "success");
+  } catch (error) {
+    console.error("Error creating todo:", error);
+    showToast("Failed to create task", "error");
+  }
+}
+
+async function createQuickTodo() {
+  const title = quickTodoTitleInput.value.trim();
+
+  if (!title) {
+    showToast("Please enter a task title", "warning");
+    return;
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/todos`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        title,
+        description: "",
+        priority: "medium",
+        completed: false,
+        position: todos.length,
+      }),
+    });
+
+    if (!response.ok) throw new Error("Failed to create task");
+
+    const newTodo = await response.json();
+    todos.push(newTodo);
+
+    closeAllModals();
+    quickTodoTitleInput.value = "";
+    renderTodos();
+    updateDashboard();
+    updateFooter();
+
+    showToast("Task added quickly!", "success");
+  } catch (error) {
+    console.error("Error creating quick todo:", error);
+    showToast("Failed to add task", "error");
+  }
+}
+
+async function updateTodo() {
+  if (!editingTodoId) return;
+
+  const title = editTodoTitleInput.value.trim();
+  const description = editTodoDescInput.value.trim();
+  const priority = editTodoPriorityInput.value;
+
+  if (!title) {
+    showToast("Please enter a task title", "warning");
+    return;
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/todos/${editingTodoId}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        title,
+        description,
+        priority,
+      }),
+    });
+
+    if (!response.ok) throw new Error("Failed to update task");
+
+    // Update local state
+    const index = todos.findIndex((t) => t.id === editingTodoId);
+    if (index !== -1) {
+      todos[index] = { ...todos[index], title, description, priority };
+    }
+
+    closeAllModals();
+    renderTodos();
+    updateDashboard();
+    updateFooter();
+
+    showToast("Task updated successfully!", "success");
+  } catch (error) {
+    console.error("Error updating todo:", error);
+    showToast("Failed to update task", "error");
+  }
+}
+
+async function toggleTodoCompletion(id) {
+  const todo = todos.find((t) => t.id === id);
+  if (!todo) return;
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/todos/${id}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        completed: !todo.completed,
+      }),
+    });
+
+    if (!response.ok) throw new Error("Failed to update task");
+
+    // Update local state
+    todo.completed = !todo.completed;
+
+    renderTodos();
+    updateDashboard();
+    updateFooter();
+
+    const message = todo.completed
+      ? "Task completed!"
+      : "Task marked as pending";
+    showToast(message, "success");
+  } catch (error) {
+    console.error("Error toggling todo:", error);
+    showToast("Failed to update task", "error");
+  }
+}
+
+async function deleteTodo(id) {
+  if (!confirm("Are you sure you want to delete this task?")) {
+    return;
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/todos/${id}`, {
+      method: "DELETE",
+    });
+
+    if (!response.ok) throw new Error("Failed to delete task");
+
+    // Update local state
+    todos = todos.filter((t) => t.id !== id);
+
+    renderTodos();
+    updateDashboard();
+    updateFooter();
+
+    showToast("Task deleted successfully!", "success");
+  } catch (error) {
+    console.error("Error deleting todo:", error);
+    showToast("Failed to delete task", "error");
+  }
+}
+
+// ============================================
+// 🖱️ DRAG & DROP FUNCTIONS
+// ============================================
+
+function initDragAndDrop() {
+  const todoCards = document.querySelectorAll(".todo-card");
+
+  todoCards.forEach((card) => {
+    card.addEventListener("dragstart", handleDragStart);
+    card.addEventListener("dragover", handleDragOver);
+    card.addEventListener("drop", handleDrop);
+    card.addEventListener("dragend", handleDragEnd);
+  });
+}
+
+function handleDragStart(e) {
+  draggedTodo = this;
+  this.classList.add("dragging");
+  e.dataTransfer.effectAllowed = "move";
+  e.dataTransfer.setData("text/plain", this.innerHTML);
+}
+
+function handleDragOver(e) {
+  e.preventDefault();
+  this.classList.add("drag-over");
+  e.dataTransfer.dropEffect = "move";
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  this.classList.remove("drag-over");
+
+  if (draggedTodo !== this) {
+    const todoCards = Array.from(
+      document.querySelectorAll(".todo-card:not(.dragging)"),
+    );
+    const draggingIndex = todoCards.indexOf(draggedTodo);
+    const dropIndex = todoCards.indexOf(this);
+
+    if (draggingIndex < dropIndex) {
+      this.parentNode.insertBefore(draggedTodo, this.nextSibling);
+    } else {
+      this.parentNode.insertBefore(draggedTodo, this);
+    }
+
+    // Update positions in database
+    updateTodoPositions();
+  }
+}
+
+function handleDragEnd() {
+  this.classList.remove("dragging");
+  document.querySelectorAll(".todo-card").forEach((card) => {
+    card.classList.remove("drag-over");
+  });
+  draggedTodo = null;
+}
+
+async function updateTodoPositions() {
+  const todoCards = document.querySelectorAll(".todo-card");
+  const orderData = [];
+
+  todoCards.forEach((card, index) => {
+    const id = parseInt(card.dataset.id);
+    orderData.push({ id, position: index });
+
+    // Update local state
+    const todo = todos.find((t) => t.id === id);
+    if (todo) {
+      todo.position = index;
+    }
+  });
+
+  // Reorder todos array to match visual order
+  todos.sort((a, b) => {
+    const aIndex = orderData.findIndex((item) => item.id === a.id);
+    const bIndex = orderData.findIndex((item) => item.id === b.id);
+    return aIndex - bIndex;
+  });
+
+  // Save to database
+  saveTodoOrder();
+}
+
+// ============================================
+// 📊 DASHBOARD FUNCTIONS
+// ============================================
+
+function updateDashboard() {
+  if (!todos.length) {
+    resetDashboard();
+    return;
+  }
+
+  const total = todos.length;
+  const completed = todos.filter((t) => t.completed).length;
+  const pending = total - completed;
+  const productivity = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+  // Calculate streak (simplified for now)
+  const streak = calculateStreak();
+
+  // Update elements
+  if (totalTasksElement) totalTasksElement.textContent = total;
+  if (completedTasksElement) completedTasksElement.textContent = completed;
+  if (pendingTasksElement) pendingTasksElement.textContent = pending;
+  if (activeStreakElement) activeStreakElement.textContent = `${streak} days`;
+
+  // Update productivity
+  if (productivityScoreElement) {
+    productivityScoreElement.textContent = `${productivity}%`;
+  }
+
+  if (productivityBar) {
+    productivityBar.style.width = `${productivity}%`;
+
+    // Color based on productivity
+    if (productivity >= 75) {
+      productivityBar.style.background = "var(--gradient-green)";
+    } else if (productivity >= 50) {
+      productivityBar.style.background = "var(--gradient-orange)";
+    } else {
+      productivityBar.style.background = "var(--gradient-purple)";
+    }
+  }
+}
+
+function calculateStreak() {
+  // Simplified streak calculation
+  // In a real app, you'd check dates of completed todos
+  const today = new Date().toDateString();
+  const hasTodayCompletion = todos.some((todo) => {
+    if (!todo.completed) return false;
+    const todoDate = new Date(todo.updated_at).toDateString();
+    return todoDate === today;
+  });
+
+  return hasTodayCompletion ? Math.floor(Math.random() * 10) + 1 : 0;
+}
+
+function resetDashboard() {
+  if (totalTasksElement) totalTasksElement.textContent = "0";
+  if (completedTasksElement) completedTasksElement.textContent = "0";
+  if (pendingTasksElement) pendingTasksElement.textContent = "0";
+  if (activeStreakElement) activeStreakElement.textContent = "0 days";
+  if (productivityScoreElement) productivityScoreElement.textContent = "0%";
+  if (productivityBar) productivityBar.style.width = "0%";
+}
+
+function updateFooter() {
+  if (!todos.length) {
+    if (todoCountElement) todoCountElement.textContent = "0 tasks";
+    if (completedCountElement)
+      completedCountElement.textContent = "0 completed";
+    return;
+  }
+
+  const total = todos.length;
+  const completed = todos.filter((t) => t.completed).length;
+
+  if (todoCountElement)
+    todoCountElement.textContent = `${total} ${total === 1 ? "task" : "tasks"}`;
+  if (completedCountElement)
+    completedCountElement.textContent = `${completed} completed`;
+}
+
+function updateApiStatus(isOnline) {
+  if (!apiStatusElement) return;
+
+  if (isOnline) {
+    apiStatusElement.textContent = "Online";
+    apiStatusElement.className = "status-online";
+  } else {
+    apiStatusElement.textContent = "Offline";
+    apiStatusElement.className = "status-offline";
+  }
+}
+
+// ============================================
+// 🪟 MODAL FUNCTIONS
+// ============================================
+
+function openModal(modal) {
+  closeAllModals();
+  modal.style.display = "flex";
+  setTimeout(() => modal.classList.add("active"), 10);
+
+  // Focus first input
+  const input = modal.querySelector("input");
+  if (input) {
+    input.focus();
+    input.select();
+  }
+}
+
+function openEditModal(todo) {
+  editingTodoId = todo.id;
+
+  editTodoTitleInput.value = todo.title;
+  editTodoDescInput.value = todo.description || "";
+  editTodoPriorityInput.value = todo.priority || "medium";
+
+  updateCharCounter(editTodoDescInput, editDescCharCount);
+
+  openModal(editTodoModal);
+}
+
+function closeAllModals() {
+  document.querySelectorAll(".modal").forEach((modal) => {
+    modal.classList.remove("active");
+    setTimeout(() => {
+      modal.style.display = "none";
+    }, 250);
+  });
+
+  editingTodoId = null;
+}
+
+// ============================================
+// 📝 FORM FUNCTIONS
+// ============================================
+
+function resetAddForm() {
+  todoTitleInput.value = "";
+  todoDescInput.value = "";
+  todoPriorityInput.value = "medium";
+  updateCharCounter(todoDescInput, descCharCount);
+}
+
+function updateCharCounter(textarea, counterElement) {
+  const length = textarea.value.length;
+  counterElement.textContent = `${length}/500`;
+
+  if (length > 500) {
+    counterElement.style.color = "var(--danger)";
+  } else if (length > 450) {
+    counterElement.style.color = "var(--warning)";
+  } else {
+    counterElement.style.color = "var(--text-secondary)";
+  }
+}
+
+// ============================================
+// 🎯 STATE MANAGEMENT
+// ============================================
+
+function showLoading() {
+  hideAllStates();
+  if (loadingState) loadingState.style.display = "block";
+}
+
+function showEmptyState() {
+  hideAllStates();
+  if (emptyState) emptyState.style.display = "block";
+}
+
+function showError(message) {
+  hideAllStates();
+  if (errorState) {
+    errorState.style.display = "block";
+    const errorMessage = document.getElementById("errorMessage");
+    if (errorMessage) errorMessage.textContent = message;
+  }
+}
+
+function hideAllStates() {
+  if (emptyState) emptyState.style.display = "none";
+  if (loadingState) loadingState.style.display = "none";
+  if (errorState) errorState.style.display = "none";
+}
+
+// ============================================
+// 💬 TOAST NOTIFICATIONS
+// ============================================
+
+function showToast(message, type = "success") {
+  const toastContainer = document.getElementById("toastContainer");
+  if (!toastContainer) return;
+
+  const toast = document.createElement("div");
+  toast.className = `toast ${type}`;
+  toast.innerHTML = `
+        <span>${message}</span>
+        <button class="toast-close">&times;</button>
+    `;
+
+  toastContainer.appendChild(toast);
+
+  // Trigger animation
+  setTimeout(() => {
+    toast.classList.add("show");
+  }, 10);
+
+  // Auto-remove after 3 seconds
+  setTimeout(() => {
+    toast.classList.remove("show");
+    setTimeout(() => {
+      if (toast.parentNode === toastContainer) {
+        toastContainer.removeChild(toast);
+      }
+    }, 300);
+  }, 3000);
+
+  // Manual close
+  toast.querySelector(".toast-close").addEventListener("click", () => {
+    toast.classList.remove("show");
+    setTimeout(() => {
+      if (toast.parentNode === toastContainer) {
+        toastContainer.removeChild(toast);
+      }
+    }, 300);
+  });
+}
+
+// ============================================
+// ⌨️ KEYBOARD SHORTCUTS
+// ============================================
+
+function handleKeyboardShortcuts(e) {
+  // Escape key closes modals
+  if (e.key === "Escape") {
+    closeAllModals();
+  }
+
+  // Ctrl/Cmd + K focuses search
+  if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+    e.preventDefault();
+    if (searchInput) {
+      searchInput.focus();
+      searchInput.select();
+    }
+  }
+
+  // Ctrl/Cmd + N opens add modal
+  if ((e.ctrlKey || e.metaKey) && e.key === "n") {
+    e.preventDefault();
+    openModal(addTodoModal);
+  }
+}
+
+// ============================================
+// 🎉 APP READY
+// ============================================
+
+console.log("🚀 TODO-IT JavaScript loaded successfully!");

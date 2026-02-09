@@ -1,0 +1,690 @@
+// ===== DRAG & DROP MANAGER =====
+class DragDropManager {
+  constructor(todoListElement, onOrderChange) {
+    this.todoList = todoListElement;
+    this.onOrderChange = onOrderChange;
+    this.draggedItem = null;
+    this.dragStartY = 0;
+    this.currentOrder = [];
+    this.init();
+  }
+
+  init() {
+    this.setupEventListeners();
+    this.updateSortableState();
+  }
+
+  setupEventListeners() {
+    this.todoList.addEventListener(
+      "mousedown",
+      this.handleDragStart.bind(this),
+    );
+    this.todoList.addEventListener(
+      "touchstart",
+      this.handleDragStart.bind(this),
+      { passive: false },
+    );
+    this.todoList.addEventListener("dragover", this.handleDragOver.bind(this));
+    this.todoList.addEventListener(
+      "dragenter",
+      this.handleDragEnter.bind(this),
+    );
+    this.todoList.addEventListener(
+      "dragleave",
+      this.handleDragLeave.bind(this),
+    );
+    this.todoList.addEventListener("drop", this.handleDrop.bind(this));
+    this.todoList.addEventListener("dragend", this.handleDragEnd.bind(this));
+  }
+
+  handleDragStart(e) {
+    const todoItem = e.target.closest(".todo-item");
+    const dragHandle = e.target.closest(".drag-handle");
+    if (!todoItem || (!dragHandle && !e.shiftKey)) return;
+    if (e.type === "touchstart") e.preventDefault();
+
+    this.draggedItem = todoItem;
+    this.dragStartY = e.clientY || (e.touches && e.touches[0].clientY);
+
+    setTimeout(() => {
+      if (this.draggedItem) this.draggedItem.classList.add("dragging");
+    }, 100);
+
+    if (e.dataTransfer) {
+      e.dataTransfer.setData("text/plain", todoItem.dataset.id);
+      e.dataTransfer.effectAllowed = "move";
+    }
+  }
+
+  handleDragOver(e) {
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+
+    const todoItem = e.target.closest(".todo-item");
+    if (todoItem && todoItem !== this.draggedItem) {
+      todoItem.classList.add("drag-over");
+    }
+  }
+
+  handleDragEnter(e) {
+    e.preventDefault();
+  }
+
+  handleDragLeave(e) {
+    const todoItem = e.target.closest(".todo-item");
+    if (todoItem) todoItem.classList.remove("drag-over");
+  }
+
+  handleDrop(e) {
+    e.preventDefault();
+    const targetItem = e.target.closest(".todo-item");
+    if (!targetItem || !this.draggedItem || targetItem === this.draggedItem)
+      return;
+
+    targetItem.classList.remove("drag-over");
+    this.todoList.insertBefore(this.draggedItem, targetItem);
+    this.updateOrder();
+
+    this.draggedItem.classList.add("reordered");
+    setTimeout(() => this.draggedItem.classList.remove("reordered"), 300);
+  }
+
+  handleDragEnd() {
+    document.querySelectorAll(".todo-item").forEach((item) => {
+      item.classList.remove("dragging", "drag-over");
+    });
+    this.draggedItem = null;
+    this.dragStartY = 0;
+  }
+
+  updateOrder() {
+    const todoItems = Array.from(this.todoList.querySelectorAll(".todo-item"));
+    this.currentOrder = todoItems.map((item) => item.dataset.id);
+
+    todoItems.forEach((item, index) => {
+      let orderIndicator = item.querySelector(".todo-order");
+      if (!orderIndicator) {
+        orderIndicator = document.createElement("span");
+        orderIndicator.className = "todo-order";
+        item.querySelector(".todo-content").prepend(orderIndicator);
+      }
+      orderIndicator.textContent = index + 1;
+    });
+
+    if (this.onOrderChange) this.onOrderChange(this.currentOrder);
+  }
+
+  updateSortableState() {
+    const todoItems = this.todoList.querySelectorAll(".todo-item");
+    todoItems.forEach((item) => {
+      if (!item.querySelector(".drag-handle")) {
+        const dragHandle = document.createElement("span");
+        dragHandle.className = "drag-handle";
+        dragHandle.innerHTML = '<i class="fas fa-grip-vertical"></i>';
+        dragHandle.setAttribute("title", "Drag to reorder");
+        item.querySelector(".todo-actions").prepend(dragHandle);
+      }
+      item.setAttribute("draggable", "true");
+    });
+    this.updateOrder();
+  }
+
+  async saveOrderToBackend() {
+    if (this.currentOrder.length === 0) return;
+    try {
+      const response = await fetch(API_URL + "/reorder", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ order: this.currentOrder }),
+      });
+      if (!response.ok) throw new Error("Failed to save order");
+      return await response.json();
+    } catch (error) {
+      console.error("Error saving order:", error);
+      throw error;
+    }
+  }
+}
+// ===== END DRAG & DROP MANAGER =====
+// ===== CONFIGURATION =====
+const API_URL = "http://localhost:3000/api/todos";
+let currentFilter = "all";
+let currentTodos = [];
+let editingTodoId = null;
+let dragDropManager = null; // Add this line
+
+// ===== DOM ELEMENTS =====
+const elements = {
+  todoList: document.getElementById("todoList"),
+  todoInput: document.getElementById("todoInput"),
+  addBtn: document.getElementById("addBtn"),
+  loadingState: document.getElementById("loadingState"),
+  emptyState: document.getElementById("emptyState"),
+  errorState: document.getElementById("errorState"),
+  totalCount: document.getElementById("totalCount"),
+  completedCount: document.getElementById("completedCount"),
+  pendingCount: document.getElementById("pendingCount"),
+  filterBtns: document.querySelectorAll(".filter-btn"),
+  editModal: document.getElementById("editModal"),
+  editTodoInput: document.getElementById("editTodoInput"),
+  saveEditBtn: document.getElementById("saveEditBtn"),
+  cancelEditBtn: document.getElementById("cancelEditBtn"),
+  retryBtn: document.getElementById("retryBtn"),
+  backendStatus: document.getElementById("backendStatus"),
+  charCount: document.getElementById("charCount"),
+};
+
+// ===== API FUNCTIONS =====
+class TodoAPI {
+  static async fetchTodos() {
+    try {
+      const response = await fetch(API_URL);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      console.error("API Error:", error);
+      throw error;
+    }
+  }
+
+  static async addTodo(title) {
+    const response = await fetch(API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title,
+        completed: false,
+        createdAt: new Date().toISOString(),
+      }),
+    });
+    if (!response.ok) throw new Error("Failed to add todo");
+    return await response.json();
+  }
+
+  static async updateTodo(id, updates) {
+    const response = await fetch(`${API_URL}/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updates),
+    });
+    if (!response.ok) throw new Error("Failed to update todo");
+    return await response.json();
+  }
+
+  static async deleteTodo(id) {
+    const response = await fetch(`${API_URL}/${id}`, {
+      method: "DELETE",
+    });
+    if (!response.ok) throw new Error("Failed to delete todo");
+    return await response.json();
+  }
+
+  static async checkBackend() {
+    try {
+      const response = await fetch(API_URL);
+      elements.backendStatus.textContent = "Connected ✅";
+      elements.backendStatus.style.color = "var(--success)";
+      return true;
+    } catch (error) {
+      elements.backendStatus.textContent = "Disconnected ❌";
+      elements.backendStatus.style.color = "var(--danger)";
+      return false;
+    }
+  }
+}
+
+// ===== UI STATE MANAGEMENT =====
+function showLoading() {
+  elements.loadingState.classList.remove("hidden");
+  elements.emptyState.classList.add("hidden");
+  elements.errorState.classList.add("hidden");
+  elements.todoList.classList.add("hidden");
+}
+
+function showEmptyState() {
+  elements.loadingState.classList.add("hidden");
+  elements.emptyState.classList.remove("hidden");
+  elements.errorState.classList.add("hidden");
+  elements.todoList.classList.add("hidden");
+}
+
+function showErrorState() {
+  elements.loadingState.classList.add("hidden");
+  elements.emptyState.classList.add("hidden");
+  elements.errorState.classList.remove("hidden");
+  elements.todoList.classList.add("hidden");
+}
+
+function showTodoList() {
+  elements.loadingState.classList.add("hidden");
+  elements.emptyState.classList.add("hidden");
+  elements.errorState.classList.add("hidden");
+  elements.todoList.classList.remove("hidden");
+}
+
+// ===== INITIALIZATION =====
+document.addEventListener("DOMContentLoaded", async () => {
+  console.log("Todo App Initializing...");
+
+  // Check backend connection
+  await TodoAPI.checkBackend();
+
+  // Set up character counter
+  elements.todoInput.addEventListener("input", updateCharCount);
+
+  // Load initial todos
+  await loadTodos();
+
+  // Set up periodic backend check (every 30 seconds)
+  setInterval(TodoAPI.checkBackend, 30000);
+});
+
+function updateCharCount() {
+  const length = elements.todoInput.value.length;
+  elements.charCount.textContent = length;
+  elements.charCount.style.color =
+    length >= 200 ? "var(--danger)" : "var(--gray)";
+}
+
+// ===== LOAD AND RENDER TODOS =====
+async function loadTodos() {
+  showLoading();
+
+  try {
+    const todos = await TodoAPI.fetchTodos();
+    currentTodos = todos;
+    renderTodos();
+    updateStats();
+    showTodoList();
+  } catch (error) {
+    console.error("Failed to load todos:", error);
+    showErrorState();
+  }
+}
+
+function filterTodos() {
+  switch (currentFilter) {
+    case "completed":
+      return currentTodos.filter((todo) => todo.completed);
+    case "pending":
+      return currentTodos.filter((todo) => !todo.completed);
+    default:
+      return currentTodos;
+  }
+}
+
+function renderTodos(todos) {
+  const filteredTodos = filterTodos();
+
+  if (filteredTodos.length === 0) {
+    showEmptyState();
+    return;
+  }
+
+  // Sort by position if available
+  const sortedTodos = [...filteredTodos].sort(
+    (a, b) => (a.position || 0) - (b.position || 0),
+  );
+
+  elements.todoList.innerHTML = sortedTodos
+    .map(
+      (todo, index) => `
+        <li class="todo-item" data-id="${todo.id}">
+            <div class="todo-content">
+                <span class="todo-order">${index + 1}</span>
+                <input 
+                    type="checkbox" 
+                    class="todo-checkbox" 
+                    ${todo.completed ? "checked" : ""}
+                    aria-label="${todo.completed ? "Mark as pending" : "Mark as completed"}"
+                >
+                <span class="todo-text ${todo.completed ? "completed" : ""}">
+                    ${escapeHtml(todo.title)}
+                </span>
+            </div>
+            <div class="todo-actions">
+                <span class="drag-handle" aria-label="Drag to reorder" title="Drag to reorder">
+                    <i class="fas fa-grip-vertical"></i>
+                </span>
+                <button class="btn-icon edit-btn" aria-label="Edit todo">
+                    <i class="fas fa-edit"></i>
+                </button>
+                <button class="btn-icon delete-btn" aria-label="Delete todo">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        </li>
+    `,
+    )
+    .join("");
+
+  showTodoList();
+
+  // Initialize/update drag & drop
+  if (dragDropManager) {
+    dragDropManager.updateSortableState();
+  }
+}
+
+// ===== DRAG & DROP HANDLER =====
+function handleOrderChange(newOrder) {
+  console.log("Order changed:", newOrder);
+  if (dragDropManager) {
+    dragDropManager
+      .saveOrderToBackend()
+      .then(() => showToast("Order updated!", "success"))
+      .catch(() => showToast("Failed to save order", "error"));
+  }
+}
+function updateStats() {
+  const total = currentTodos.length;
+  const completed = currentTodos.filter((todo) => todo.completed).length;
+  const pending = total - completed;
+
+  elements.totalCount.textContent = total;
+  elements.completedCount.textContent = completed;
+  elements.pendingCount.textContent = pending;
+}
+
+// ===== UTILITY FUNCTIONS =====
+function escapeHtml(text) {
+  const div = document.createElement("div");
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function formatDate(dateString) {
+  if (!dateString) return "";
+  const date = new Date(dateString);
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+// ===== EVENT LISTENERS SETUP =====
+function setupEventListeners() {
+  // Add todo
+  elements.addBtn.addEventListener("click", addNewTodo);
+  elements.todoInput.addEventListener("keypress", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      addNewTodo();
+    }
+  });
+
+  // Filter buttons
+  elements.filterBtns.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      elements.filterBtns.forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      currentFilter = btn.dataset.filter;
+      renderTodos();
+    });
+  });
+
+  // Event delegation for todo list actions
+  elements.todoList.addEventListener("click", handleTodoAction);
+
+  // Modal actions
+  elements.saveEditBtn.addEventListener("click", saveTodoEdit);
+  elements.cancelEditBtn.addEventListener("click", closeEditModal);
+  elements.retryBtn.addEventListener("click", loadTodos);
+
+  // Close modal on background click
+  elements.editModal.addEventListener("click", (e) => {
+    if (e.target === elements.editModal) {
+      closeEditModal();
+    }
+  });
+
+  // Close modal on Escape key
+  document.addEventListener("keydown", (e) => {
+    if (
+      e.key === "Escape" &&
+      !elements.editModal.classList.contains("hidden")
+    ) {
+      closeEditModal();
+    }
+  });
+}
+
+// ===== CRUD OPERATIONS =====
+async function addNewTodo() {
+  const title = elements.todoInput.value.trim();
+
+  if (!title) {
+    showToast("Please enter a todo!", "warning");
+    elements.todoInput.focus();
+    return;
+  }
+
+  if (title.length > 200) {
+    showToast("Todo must be 200 characters or less", "warning");
+    return;
+  }
+
+  try {
+    await TodoAPI.addTodo(title);
+    elements.todoInput.value = "";
+    updateCharCount();
+    await loadTodos(); // Refresh the list
+    showToast("Todo added successfully!", "success");
+    elements.todoInput.focus();
+  } catch (error) {
+    console.error("Error adding todo:", error);
+    showToast("Failed to add todo. Please try again.", "error");
+  }
+}
+
+function handleTodoAction(e) {
+  const todoItem = e.target.closest(".todo-item");
+  if (!todoItem) return;
+
+  const todoId = todoItem.dataset.id;
+  const todo = currentTodos.find((t) => t.id == todoId);
+  if (!todo) return;
+
+  // Checkbox toggle
+  if (e.target.classList.contains("todo-checkbox")) {
+    toggleTodoCompletion(todoId, todo.completed);
+    return;
+  }
+
+  // Edit button
+  if (e.target.closest(".edit-btn")) {
+    openEditModal(todo);
+    return;
+  }
+
+  // Delete button
+  if (e.target.closest(".delete-btn")) {
+    deleteTodo(todoId);
+    return;
+  }
+}
+
+async function toggleTodoCompletion(id, currentStatus) {
+  try {
+    await TodoAPI.updateTodo(id, { completed: !currentStatus });
+    await loadTodos(); // Refresh to update stats
+    showToast("Todo updated!", "success");
+  } catch (error) {
+    console.error("Error toggling todo:", error);
+    showToast("Failed to update todo", "error");
+  }
+}
+
+function openEditModal(todo) {
+  editingTodoId = todo.id;
+  elements.editTodoInput.value = todo.title;
+  elements.editModal.classList.remove("hidden");
+  elements.editTodoInput.focus();
+  elements.editTodoInput.select();
+}
+
+function closeEditModal() {
+  editingTodoId = null;
+  elements.editModal.classList.add("hidden");
+  elements.editTodoInput.value = "";
+}
+
+async function saveTodoEdit() {
+  const newTitle = elements.editTodoInput.value.trim();
+
+  if (!newTitle) {
+    showToast("Todo cannot be empty!", "warning");
+    return;
+  }
+
+  if (newTitle.length > 200) {
+    showToast("Todo must be 200 characters or less", "warning");
+    return;
+  }
+
+  try {
+    await TodoAPI.updateTodo(editingTodoId, { title: newTitle });
+    closeEditModal();
+    await loadTodos();
+    showToast("Todo updated successfully!", "success");
+  } catch (error) {
+    console.error("Error updating todo:", error);
+    showToast("Failed to update todo", "error");
+  }
+}
+
+async function deleteTodo(id) {
+  if (!confirm("Are you sure you want to delete this todo?")) {
+    return;
+  }
+
+  try {
+    await TodoAPI.deleteTodo(id);
+    await loadTodos();
+    showToast("Todo deleted!", "success");
+  } catch (error) {
+    console.error("Error deleting todo:", error);
+    showToast("Failed to delete todo", "error");
+  }
+}
+
+// ===== NOTIFICATION SYSTEM =====
+function showToast(message, type = "info") {
+  // Remove existing toast
+  const existingToast = document.querySelector(".toast");
+  if (existingToast) existingToast.remove();
+
+  // Create toast element
+  const toast = document.createElement("div");
+  toast.className = `toast toast-${type}`;
+  toast.textContent = message;
+
+  // Style the toast
+  toast.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 1rem 1.5rem;
+        border-radius: var(--border-radius);
+        background: ${getToastColor(type)};
+        color: white;
+        font-weight: 500;
+        z-index: 1001;
+        animation: slideIn 0.3s ease-out;
+        box-shadow: var(--shadow);
+        max-width: 300px;
+    `;
+
+  // Add animation styles
+  const style = document.createElement("style");
+  style.textContent = `
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes slideOut {
+            from { transform: translateX(0); opacity: 1; }
+            to { transform: translateX(100%); opacity: 0; }
+        }
+    `;
+  document.head.appendChild(style);
+
+  document.body.appendChild(toast);
+
+  // Auto remove after 3 seconds
+  setTimeout(() => {
+    toast.style.animation = "slideOut 0.3s ease-out forwards";
+    setTimeout(() => toast.remove(), 300);
+  }, 3000);
+}
+
+function getToastColor(type) {
+  const colors = {
+    success: "var(--success)",
+    error: "var(--danger)",
+    warning: "var(--warning)",
+    info: "var(--primary)",
+  };
+  return colors[type] || colors.info;
+}
+
+// ===== INITIALIZE APP =====
+// Update the DOMContentLoaded event listener
+document.addEventListener("DOMContentLoaded", async () => {
+  console.log("Todo App Initializing...");
+
+  // Check backend connection
+  await TodoAPI.checkBackend();
+
+  // Set up character counter
+  elements.todoInput.addEventListener("input", updateCharCount);
+
+  // Set up all event listeners
+  setupEventListeners();
+
+  // Load initial todos
+  await loadTodos();
+
+  // Set focus to input
+  elements.todoInput.focus();
+
+  // Set up periodic backend check
+  setInterval(TodoAPI.checkBackend, 30000);
+  // ===== INITIALIZE DRAG & DROP =====
+  setTimeout(() => {
+    if (elements.todoList) {
+      dragDropManager = new DragDropManager(
+        elements.todoList,
+        handleOrderChange,
+      );
+
+      // Add save order button
+      const saveOrderBtn = document.createElement("button");
+      saveOrderBtn.id = "saveOrderBtn";
+      saveOrderBtn.className = "btn-secondary";
+      saveOrderBtn.innerHTML = '<i class="fas fa-save"></i> Save Order';
+      saveOrderBtn.style.cssText =
+        "margin: 10px 0; display: block; width: 100%;";
+
+      // Insert before todo list
+      if (elements.todoList.parentNode) {
+        elements.todoList.parentNode.insertBefore(
+          saveOrderBtn,
+          elements.todoList,
+        );
+      }
+
+      saveOrderBtn.addEventListener("click", async () => {
+        if (dragDropManager) {
+          try {
+            await dragDropManager.saveOrderToBackend();
+            showToast("Order saved successfully!", "success");
+          } catch (error) {
+            showToast("Failed to save order", "error");
+          }
+        }
+      });
+    }
+  }, 100);
+});

@@ -1,0 +1,71 @@
+// src/routes/todoRoutes.js - API endpoints
+const express = require("express");
+const todoController = require("../controllers/todoController");
+
+const router = express.Router();
+
+// GET all todos
+router.get("/", todoController.getAllTodos);
+
+// GET single todo
+router.get("/:id", todoController.getTodoById);
+
+// POST create todo
+router.post("/", todoController.createTodo);
+
+// PUT update todo
+router.put("/:id", todoController.updateTodo);
+
+// DELETE todo
+router.delete("/:id", todoController.deleteTodo);
+
+// PATCH toggle completion
+router.patch("/:id/complete", todoController.toggleComplete);
+
+module.exports = router;
+
+// Add this route for saving order
+router.put("/reorder", async (req, res) => {
+  try {
+    const { order } = req.body;
+    console.log("Received new order:", order);
+    res.json({ success: true, message: "Order saved", order });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+// Add this route for saving order - PUT /api/todos/reorder
+router.put("/reorder", async (req, res) => {
+  try {
+    const { order } = req.body;
+
+    if (!Array.isArray(order)) {
+      return res.status(400).json({
+        error: "Order must be an array of todo IDs",
+      });
+    }
+
+    console.log("📦 Saving todo order:", order);
+
+    // Update each todo's position in database
+    for (let i = 0; i < order.length; i++) {
+      const todoId = order[i];
+      await db.query(
+        "UPDATE todos SET position = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2",
+        [i, todoId],
+      );
+    }
+
+    res.json({
+      success: true,
+      message: `Order saved for ${order.length} todos`,
+      order,
+    });
+  } catch (error) {
+    console.error("Error saving order:", error);
+    res.status(500).json({
+      error: "Failed to save order",
+      details: error.message,
+    });
+  }
+});
