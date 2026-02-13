@@ -1,32 +1,32 @@
-﻿const { Client } = require('pg');
-require('dotenv').config();
-
-const sampleTodos = [
-    {title: 'Plan Week', description: 'Set goals', completed: false},
-    {title: 'Document Project', description: 'Write docs', completed: false},
-    {title: 'Test Features', description: 'Verify everything works', completed: true}
-];
+﻿require("dotenv").config();
+const { Pool } = require("pg");
 
 async function resetDatabase() {
-    const client = new Client({ connectionString: process.env.DATABASE_URL });
-    try {
-        await client.connect();
-        await client.query('DELETE FROM todos');
-        await client.query('ALTER SEQUENCE todos_id_seq RESTART WITH 1');
-        
-        for (let i = 0; i < sampleTodos.length; i++) {
-            const todo = sampleTodos[i];
-            await client.query(
-                'INSERT INTO todos (title, description, completed, position) VALUES (, , , )',
-                [todo.title, todo.description, todo.completed, i]
-            );
-        }
-        
-        console.log('✅ Database reset with', sampleTodos.length, 'todos');
-    } catch (error) {
-        console.error('Error:', error.message);
-    } finally {
-        await client.end();
-    }
+  console.log("🔄 Resetting database...");
+
+  const pool = new Pool({
+    host: process.env.DB_HOST,
+    port: process.env.DB_PORT,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: "postgres",
+  });
+
+  try {
+    // Drop the database if it exists
+    console.log("🗑️  Dropping database...");
+    await pool.query(`DROP DATABASE IF EXISTS ${process.env.DB_NAME}`);
+    console.log("✅ Database dropped");
+
+    await pool.end();
+
+    // Reinitialize
+    console.log("\n🚀 Reinitializing database...");
+    require("./init-db.js");
+  } catch (error) {
+    console.error("❌ Reset failed:", error.message);
+    process.exit(1);
+  }
 }
+
 resetDatabase();

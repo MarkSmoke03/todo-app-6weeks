@@ -1,4 +1,4 @@
-// src/models/todoModel.js - Database operations
+﻿// src/models/todoModel.js - Database operations
 const pool = require("../db/pool");
 
 const todoModel = {

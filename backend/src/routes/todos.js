@@ -1,6 +1,30 @@
-const express = require("express");
+﻿const express = require("express");
 const router = express.Router();
-const db = require("../../db/db");
+// FIXED: Use correct path based on your structure
+const db = require("../../db/db"); // Make sure this file exists!
+
+// ===================
+// HEALTH CHECK - ADDED
+// ===================
+router.get("/health", async (req, res) => {
+  try {
+    await db.query("SELECT 1");
+    res.status(200).json({
+      status: "ok",
+      message: "API is healthy",
+      timestamp: new Date().toISOString(),
+      database: "connected",
+    });
+  } catch (error) {
+    console.error("Health check failed:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Database connection failed",
+      timestamp: new Date().toISOString(),
+      database: "disconnected",
+    });
+  }
+});
 
 // ===================
 // GET ALL TODOS
@@ -13,28 +37,25 @@ router.get("/", async (req, res) => {
     const params = [];
     let paramCount = 1;
 
-    // Status filtering
     if (filter === "completed") {
       query += ` AND completed = true`;
     } else if (filter === "pending") {
       query += ` AND completed = false`;
     }
 
-    // Date filtering for calendar
     if (date) {
       query += ` AND DATE(due_date) = $${paramCount}`;
       params.push(date);
       paramCount++;
     }
 
-    // Search
     if (search) {
       query += ` AND (title ILIKE $${paramCount} OR description ILIKE $${paramCount})`;
       params.push(`%${search}%`);
       paramCount++;
     }
 
-    // Sorting
+    // FIXED: Sort by "order" as default, not position
     if (sort === "due_date") {
       query += " ORDER BY due_date NULLS LAST";
     } else if (sort === "priority") {
@@ -48,7 +69,7 @@ router.get("/", async (req, res) => {
     } else if (sort === "oldest") {
       query += " ORDER BY created_at ASC";
     } else {
-      query += ' ORDER BY "order" ASC';
+      query += ' ORDER BY "order" ASC, created_at DESC';
     }
 
     const result = await db.query(query, params);
@@ -89,27 +110,17 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ error: "Title is required" });
     }
 
-    // Get highest order
+    // FIXED: Get max order for new todo
     const orderResult = await db.query(
       'SELECT COALESCE(MAX("order"), 0) as max_order FROM todos',
     );
     const newOrder = orderResult.rows[0].max_order + 1;
 
-    // Format due_date - FIXED TIMEZONE ISSUE
     let dueDateValue = null;
     if (due_date) {
-      // Check if date is in YYYY-MM-DD format
-      if (due_date.match(/^\d{4}-\d{2}-\d{2}$/)) {
-        dueDateValue = due_date; // Store as YYYY-MM-DD
-      } else {
-        // Try to parse other formats
-        const date = new Date(due_date);
-        if (!isNaN(date.getTime())) {
-          const year = date.getFullYear();
-          const month = String(date.getMonth() + 1).padStart(2, "0");
-          const day = String(date.getDate()).padStart(2, "0");
-          dueDateValue = `${year}-${month}-${day}`;
-        }
+      const dateMatch = String(due_date).match(/(\d{4})-(\d{2})-(\d{2})/);
+      if (dateMatch) {
+        dueDateValue = dateMatch[0];
       }
     }
 
@@ -135,38 +146,28 @@ router.post("/", async (req, res) => {
 });
 
 // ===================
-// UPDATE TODO - FIXED
+// UPDATE TODO
 // ===================
 router.put("/:id", async (req, res) => {
   try {
     const { id } = req.params;
     const { title, description, priority, completed, due_date } = req.body;
 
-    // Format due_date - FIXED TIMEZONE ISSUE
     let dueDateValue = null;
     if (due_date) {
-      // Check if date is in YYYY-MM-DD format
-      if (due_date.match(/^\d{4}-\d{2}-\d{2}$/)) {
-        dueDateValue = due_date; // Store as YYYY-MM-DD
-      } else {
-        // Try to parse other formats
-        const date = new Date(due_date);
-        if (!isNaN(date.getTime())) {
-          const year = date.getFullYear();
-          const month = String(date.getMonth() + 1).padStart(2, "0");
-          const day = String(date.getDate()).padStart(2, "0");
-          dueDateValue = `${year}-${month}-${day}`;
-        }
+      const dateMatch = String(due_date).match(/(\d{4})-(\d{2})-(\d{2})/);
+      if (dateMatch) {
+        dueDateValue = dateMatch[0];
       }
     }
 
     const result = await db.query(
       `UPDATE todos 
-       SET title = $1, 
-           description = $2, 
-           priority = $3, 
-           completed = $4, 
-           due_date = $5,
+       SET title = COALESCE($1, title),
+           description = COALESCE($2, description),
+           priority = COALESCE($3, priority),
+           completed = COALESCE($4, completed),
+           due_date = COALESCE($5, due_date),
            updated_at = NOW()
        WHERE id = $6
        RETURNING *`,
@@ -185,7 +186,7 @@ router.put("/:id", async (req, res) => {
 });
 
 // ===================
-// DELETE TODO - FIXED
+// DELETE TODO
 // ===================
 router.delete("/:id", async (req, res) => {
   try {
@@ -208,24 +209,30 @@ router.delete("/:id", async (req, res) => {
 });
 
 // ===================
-// REORDER TODOS - FIXED
+// REORDER TODOS - FIXED VERSION
 // ===================
 router.put("/reorder", async (req, res) => {
   try {
-    const { order } = req.body;
+    const { orderedIds } = req.body; // CHANGED: from 'order' to 'orderedIds' for consistency
 
-    if (!order || !Array.isArray(order)) {
-      return res.status(400).json({ error: "Invalid order data" });
+    if (!orderedIds || !Array.isArray(orderedIds)) {
+      return res.status(400).json({ error: "orderedIds array is required" });
     }
 
-    for (const item of order) {
+    // Update each todo with its new order position
+    for (let i = 0; i < orderedIds.length; i++) {
       await db.query('UPDATE todos SET "order" = $1 WHERE id = $2', [
-        item.position,
-        item.id,
+        i + 1,
+        orderedIds[i],
       ]);
     }
 
-    res.json({ message: "Todos reordered successfully" });
+    // Fetch and return the reordered todos
+    const result = await db.query(
+      'SELECT * FROM todos ORDER BY "order" ASC, created_at DESC',
+    );
+
+    res.json(result.rows);
   } catch (error) {
     console.error("Error reordering todos:", error);
     res.status(500).json({ error: "Failed to reorder todos" });
@@ -233,54 +240,95 @@ router.put("/reorder", async (req, res) => {
 });
 
 // ===================
-// GET CALENDAR DATA - FIXED
+// BATCH DELETE - NEW FEATURE
 // ===================
-router.get("/calendar/grouped", async (req, res) => {
+router.delete("/batch/delete", async (req, res) => {
   try {
-    const result = await db.query(`
-      SELECT 
-        due_date as date,
-        COUNT(*) as task_count,
-        SUM(CASE WHEN completed = true THEN 1 ELSE 0 END) as completed_count,
-        JSON_AGG(
-          JSON_BUILD_OBJECT(
-            'id', id,
-            'title', title,
-            'priority', priority,
-            'completed', completed,
-            'due_date', due_date
-          )
-        ) as tasks
-      FROM todos 
-      WHERE due_date IS NOT NULL
-      GROUP BY due_date
-      ORDER BY due_date ASC
-    `);
+    const { ids } = req.body;
 
-    res.json(result.rows);
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: "Array of ids is required" });
+    }
+
+    const placeholders = ids.map((_, i) => `$${i + 1}`).join(",");
+    const query = `DELETE FROM todos WHERE id IN (${placeholders}) RETURNING id`;
+
+    const result = await db.query(query, ids);
+
+    res.json({
+      message: "Todos deleted successfully",
+      deleted: result.rows.length,
+    });
   } catch (error) {
-    console.error("Error fetching calendar data:", error);
-    res.status(500).json({ error: "Failed to fetch calendar data" });
+    console.error("Error batch deleting todos:", error);
+    res.status(500).json({ error: "Failed to delete todos" });
   }
 });
 
 // ===================
-// GET OVERDUE TODOS
+// GET STATISTICS - NEW FEATURE
 // ===================
-router.get("/overdue", async (req, res) => {
+router.get("/stats/summary", async (req, res) => {
   try {
+    const stats = await db.query(`
+      SELECT 
+        COUNT(*) as total,
+        COUNT(CASE WHEN completed = true THEN 1 END) as completed,
+        COUNT(CASE WHEN completed = false THEN 1 END) as pending,
+        COUNT(CASE WHEN due_date < CURRENT_DATE AND completed = false THEN 1 END) as overdue,
+        COUNT(CASE WHEN priority = 'high' THEN 1 END) as high_priority,
+        COUNT(CASE WHEN priority = 'medium' THEN 1 END) as medium_priority,
+        COUNT(CASE WHEN priority = 'low' THEN 1 END) as low_priority,
+        COUNT(CASE WHEN due_date IS NOT NULL THEN 1 END) as has_due_date
+      FROM todos
+    `);
+
+    res.json(stats.rows[0]);
+  } catch (error) {
+    console.error("Error fetching stats:", error);
+    res.status(500).json({ error: "Failed to fetch statistics" });
+  }
+});
+
+// ===================
+// GET UPCOMING DUES - NEW FEATURE
+// ===================
+router.get("/filter/upcoming", async (req, res) => {
+  try {
+    const { days = 7 } = req.query;
+
     const result = await db.query(
       `SELECT * FROM todos 
-       WHERE due_date IS NOT NULL 
-         AND due_date < CURRENT_DATE
-         AND completed = false
+       WHERE completed = false 
+         AND due_date IS NOT NULL 
+         AND due_date BETWEEN CURRENT_DATE AND CURRENT_DATE + $1::integer
        ORDER BY due_date ASC`,
+      [days],
     );
 
     res.json(result.rows);
   } catch (error) {
-    console.error("Error fetching overdue todos:", error);
-    res.status(500).json({ error: "Failed to fetch overdue todos" });
+    console.error("Error fetching upcoming todos:", error);
+    res.status(500).json({ error: "Failed to fetch upcoming todos" });
+  }
+});
+
+// ===================
+// GET TODAY'S TASKS - NEW FEATURE
+// ===================
+router.get("/filter/today", async (req, res) => {
+  try {
+    const result = await db.query(
+      `SELECT * FROM todos 
+       WHERE completed = false 
+         AND due_date = CURRENT_DATE
+       ORDER BY priority DESC, "order" ASC`,
+    );
+
+    res.json(result.rows);
+  } catch (error) {
+    console.error("Error fetching today's todos:", error);
+    res.status(500).json({ error: "Failed to fetch today's todos" });
   }
 });
 

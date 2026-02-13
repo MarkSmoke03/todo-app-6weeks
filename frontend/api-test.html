@@ -1,0 +1,184 @@
+<!doctype html>
+<html>
+  <head>
+    <title>TODO-IT API Test (Port 5000)</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        padding: 20px;
+        background: #0f172a;
+        color: #f8fafc;
+      }
+      .test {
+        margin: 15px 0;
+        padding: 15px;
+        border: 1px solid #334155;
+        border-radius: 8px;
+        background: #1e293b;
+      }
+      .success {
+        border-left: 4px solid #10b981;
+      }
+      .error {
+        border-left: 4px solid #ef4444;
+      }
+      button {
+        margin: 5px;
+        padding: 10px 20px;
+        background: #6366f1;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 600;
+      }
+      button:hover {
+        background: #4f46e5;
+      }
+      #results {
+        margin-top: 10px;
+        padding: 10px;
+        background: #334155;
+        border-radius: 6px;
+        font-family: monospace;
+        white-space: pre-wrap;
+        max-height: 300px;
+        overflow-y: auto;
+      }
+      h1 {
+        color: #6366f1;
+        margin-bottom: 30px;
+      }
+      h3 {
+        color: #94a3b8;
+        margin-bottom: 10px;
+      }
+      .port-info {
+        background: #334155;
+        padding: 10px;
+        border-radius: 6px;
+        margin-bottom: 20px;
+        color: #f59e0b;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="port-info">
+      <strong>⚠️ Testing Port: 5000</strong> - Make sure backend is running on
+      localhost:5000
+    </div>
+
+    <h1>🔧 TODO-IT API Test (Port 5000)</h1>
+
+    <div class="test">
+      <h3>Test 1: Check API Connection</h3>
+      <button onclick="testConnection()">Test Connection to Port 5000</button>
+      <div id="connectionResult"></div>
+    </div>
+
+    <div class="test">
+      <h3>Test 2: Create Test Task</h3>
+      <button onclick="createTask()">Create Test Task</button>
+      <div id="createResult"></div>
+    </div>
+
+    <div class="test">
+      <h3>Test 3: List All Tasks</h3>
+      <button onclick="listTasks()">List Tasks</button>
+      <div id="listResult"></div>
+    </div>
+
+    <script>
+      const API_URL = "http://localhost:5000/api/todos";
+
+      async function testConnection() {
+        try {
+          const response = await fetch(API_URL);
+          const result = document.getElementById("connectionResult");
+          if (response.ok) {
+            result.innerHTML =
+              '<span style="color:#10b981">✅ API Connected Successfully on Port 5000!</span>';
+            result.className = "success";
+          } else {
+            result.innerHTML = `<span style="color:#ef4444">❌ API Error: ${response.status}</span>`;
+            result.className = "error";
+          }
+        } catch (error) {
+          const result = document.getElementById("connectionResult");
+          result.innerHTML = `<span style="color:#ef4444">❌ Connection Failed to Port 5000: ${error.message}</span>`;
+          result.className = "error";
+        }
+      }
+
+      async function createTask() {
+        try {
+          const response = await fetch(API_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              title: "Test Task from API Test",
+              description:
+                "This task was created for testing the API on port 5000",
+              completed: false,
+              priority: "medium",
+            }),
+          });
+
+          const result = document.getElementById("createResult");
+          if (response.ok) {
+            const data = await response.json();
+            result.innerHTML = `<span style="color:#10b981">✅ Task Created Successfully on Port 5000!</span><br>
+                                ID: ${data.id}<br>
+                                Title: ${data.title}`;
+            result.className = "success";
+          } else {
+            result.innerHTML = `<span style="color:#ef4444">❌ Failed to create task: ${response.status}</span>`;
+            result.className = "error";
+          }
+        } catch (error) {
+          const result = document.getElementById("createResult");
+          result.innerHTML = `<span style="color:#ef4444">❌ Error: ${error.message}</span>`;
+          result.className = "error";
+        }
+      }
+
+      async function listTasks() {
+        try {
+          const response = await fetch(API_URL);
+          const result = document.getElementById("listResult");
+          if (response.ok) {
+            const tasks = await response.json();
+            result.innerHTML = `<span style="color:#10b981">✅ Found ${tasks.length} task(s) on Port 5000</span><br><br>`;
+
+            if (tasks.length > 0) {
+              tasks.forEach((task, index) => {
+                result.innerHTML += `${index + 1}. ${task.title} (ID: ${task.id})<br>
+                                     Status: ${task.completed ? "✅ Completed" : "⏳ Pending"}<br>
+                                     Priority: ${task.priority}<br><br>`;
+              });
+            } else {
+              result.innerHTML +=
+                "No tasks found in the database on port 5000.";
+            }
+
+            result.className = "success";
+          } else {
+            result.innerHTML = `<span style="color:#ef4444">❌ Failed to list tasks: ${response.status}</span>`;
+            result.className = "error";
+          }
+        } catch (error) {
+          const result = document.getElementById("listResult");
+          result.innerHTML = `<span style="color:#ef4444">❌ Error: ${error.message}</span>`;
+          result.className = "error";
+        }
+      }
+
+      // Auto-test on load
+      window.onload = testConnection;
+
+      // Quick test in console
+      console.log("🔧 API Test Page - Testing Port 5000");
+      console.log("📡 API URL:", API_URL);
+    </script>
+  </body>
+</html>
